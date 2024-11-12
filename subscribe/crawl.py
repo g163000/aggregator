@@ -329,7 +329,7 @@ def batch_crawl(conf: dict, num_threads: int = 50, display: bool = True) -> list
 
         if len(unknowns) > 0:
             unknowns = [utils.mask(url=x) for x in unknowns]
-            logger.warn(
+            logger.warning(
                 f"[CrawlWarn] some links were found, but could not be confirmed to work, subscriptions: {unknowns}"
             )
 
@@ -1081,9 +1081,9 @@ def extract_subscribes(
         return {}
     try:
         limits, collections, proxies = max(1, limits), {}, []
-        sub_regex = r"https?://(?:[a-zA-Z0-9\u4e00-\u9fa5\-]+\.)+[a-zA-Z0-9\u4e00-\u9fa5\-]+(?:(?:(?:/index.php)?/api/v1/client/subscribe\?token=[a-zA-Z0-9]{16,32})|(?:/link/[a-zA-Z0-9]+\?(?:sub|mu|clash)=\d))"
+        sub_regex = r"https?://(?:[a-zA-Z0-9\u4e00-\u9fa5\-]+\.)+[a-zA-Z0-9\u4e00-\u9fa5\-]+(?:(?:(?:/index.php)?/api/v1/client/subscribe\?token=[a-zA-Z0-9]{16,32})|(?:/link/[a-zA-Z0-9]+\?(?:sub|mu|clash)=\d))|https://jmssub\.net/members/getsub\.php\?service=\d+&id=[a-zA-Z0-9\-]{36}(?:\S+)?"
         extra_regex = r"https?://(?:[a-zA-Z0-9\u4e00-\u9fa5\-]+\.)+[a-zA-Z0-9\u4e00-\u9fa5\-]+/sub\?(?:\S+)?target=\S+"
-        protocal_regex = r"(?:vmess|trojan|ss|ssr|snell|hysteria2|vless|hysteria)://[a-zA-Z0-9:.?+=@%&#_\-/]{10,}"
+        protocal_regex = r"(?:vmess|trojan|ss|ssr|snell|hysteria2|vless|hysteria|tuic)://[a-zA-Z0-9:.?+=@%&#_\-/]{10,}"
 
         regex = f"{sub_regex}|{extra_regex}"
 
@@ -1125,10 +1125,12 @@ def extract_subscribes(
                     items.extend([x for x in url.split("|") if not re.match(extra_regex, x, flags=re.I)])
 
             for s in items:
+                s = re.sub(r"\\/|\/", "/", s, flags=re.I)
                 try:
                     if include and not re.match(
                         r"https?://(?:[a-zA-Z0-9\u4e00-\u9fa5\-]+\.)+[a-zA-Z0-9\u4e00-\u9fa5\-]+.*",
                         s,
+                        flags=re.I,
                     ):
                         continue
 
@@ -1212,7 +1214,8 @@ def validate(
     if not params.pop("saved", False):
         if reachable or (discovered and defeat <= threshold and not expired):
             # don't storage temporary link shared by someone
-            if not workflow.standard_sub(url=url) and mode != 1:
+            pardon = params.pop("pardon", False)
+            if not pardon and not workflow.standard_sub(url=url) and mode != 1:
                 return result
 
             remark(source=params, defeat=defeat, discovered=True)
@@ -1277,6 +1280,10 @@ def check_status(
             yaml.add_multi_constructor("str", lambda loader, suffix, node: str(node.value), Loader=yaml.SafeLoader)
             proxies = yaml.load(content, Loader=yaml.FullLoader).get("proxies", [])
         except:
+            if all(airport.AirPort.check_protocol(x) for x in content.split("\n") if x):
+                return True, False
+
+            # TODO: 如果配置文件为 singbox、quanx、loon、surge等，需要解析出代理节点信息，并判断是否过期
             proxies = []
 
         if proxies is None or len(proxies) == 0:
